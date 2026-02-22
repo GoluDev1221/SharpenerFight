@@ -98,17 +98,16 @@
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
-    const WIN_SCORE = 5; // First to 5 wins!
-    let gameState = 'playing'; // 'playing' or 'gameover'
+    const WIN_SCORE = 5; 
+    let gameState = 'playing'; 
     
     let scores = [0, 0], turn = 0, isMoving = false, gameMode = 'pvp';
     let drag = { active: false, x: 0, y: 0, mx: 0, my: 0 };
     let obstacle = null;
     let aiThinking = false;
-    let shakeTimer = 0; // Screen shake
-    let particles = []; // Spark effect
+    let shakeTimer = 0; 
+    let particles = []; 
 
-    // Visual effect class
     class Particle {
         constructor(x, y) {
             this.x = x; this.y = y;
@@ -117,7 +116,7 @@
             this.vx = Math.cos(angle) * speed;
             this.vy = Math.sin(angle) * speed;
             this.life = 1.0; 
-            this.color = Math.random() > 0.5 ? '#f39c12' : '#e74c3c'; // Orange/Red sparks
+            this.color = Math.random() > 0.5 ? '#f39c12' : '#e74c3c'; 
         }
         update() {
             this.x += this.vx; this.y += this.vy;
@@ -137,8 +136,12 @@
             this.spawn(side);
         }
         spawn(side) {
-            this.x = side === 0 ? 150 : 700;
-            this.y = 275;
+            // RANDOM SPAWN LOGIC ADDED HERE
+            // Side 0 (Red) spawns in the left box (X: 80 to 280)
+            // Side 1 (Blue) spawns in the right box (X: 570 to 770)
+            // Both spawn randomly vertically (Y: 80 to 470)
+            this.x = side === 0 ? 80 + Math.random() * 200 : 570 + Math.random() * 200;
+            this.y = 80 + Math.random() * 390;
             this.vx = 0; this.vy = 0; this.active = true;
         }
         draw() {
@@ -169,6 +172,7 @@
 
     function spawnObstacle() {
         const types = ['hole', 'pencil', 'eraser'];
+        // Obstacles only spawn in the center column (X: 350 to 500) so they never overlap player spawns
         obstacle = { 
             type: types[Math.floor(Math.random()*3)], 
             x: 350+Math.random()*150, 
@@ -213,7 +217,7 @@
         if(gameMode === 'pvc' && turn === 1 && !isMoving && !aiThinking && gameState === 'playing') {
             aiThinking = true;
             setTimeout(() => {
-                if(gameState !== 'playing') return; // Prevent AI from shooting after game over
+                if(gameState !== 'playing') return; 
                 const dx = p1.x - p2.x;
                 const dy = p1.y - p2.y;
                 p2.vx = dx * 0.14 + (Math.random()-0.5)*3; 
@@ -273,8 +277,7 @@
                 p1.vx -= impulse * nx; p1.vy -= impulse * ny;
                 p2.vx += impulse * nx; p2.vy += impulse * ny;
                 
-                // ADD JUICE: Sparks and Screen Shake!
-                if(impulse > 5) { // Only spark on hard hits
+                if(impulse > 5) { 
                     shakeTimer = 10;
                     let midX = p1.x + (dx/2); let midY = p1.y + (dy/2);
                     for(let i=0; i<15; i++) particles.push(new Particle(midX, midY));
@@ -312,7 +315,7 @@
     }
 
     function resetRound(forceTurn = null) {
-        if(gameState === 'gameover') return; // Don't reset pieces if game is over
+        if(gameState === 'gameover') return; 
         p1.spawn(0); p2.spawn(1); spawnObstacle();
         isMoving = false; aiThinking = false; drag.active = false; particles = [];
         turn = forceTurn !== null ? forceTurn : 1 - turn; 
@@ -327,7 +330,6 @@
     function loop() {
         ctx.save();
         
-        // SCREEN SHAKE LOGIC
         if (shakeTimer > 0) {
             let magnitude = (shakeTimer / 10) * 5; 
             let randomX = (Math.random() - 0.5) * magnitude;
@@ -358,13 +360,12 @@
         
         p1.draw(); p2.draw();
         
-        // Update and draw particles
         for(let i=particles.length-1; i>=0; i--) {
             particles[i].update(); particles[i].draw();
             if(particles[i].life <= 0) particles.splice(i, 1);
         }
 
-        ctx.restore(); // Undo screen shake translation
+        ctx.restore(); 
 
         const msg = document.getElementById('status-display');
         if (gameState === 'gameover') {
