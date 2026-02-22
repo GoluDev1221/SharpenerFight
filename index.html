@@ -11,45 +11,72 @@
         :root { --wood: #3d2b1f; --ui: #1a1a1a; }
         body { 
             margin: 0; background: #2d3436; color: #eee; 
-            font-family: 'Courier New', monospace; display: flex; flex-direction: column; align-items: center;
+            font-family: 'Courier New', monospace; 
             user-select: none; -webkit-user-select: none;
-            padding-top: 10px;
+            overflow: hidden; /* Prevents scrolling */
         }
+        
+        /* Landscape Enforcer */
+        #landscape-warning {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #2d3436; color: #f1c40f; z-index: 9999;
+            flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 20px; box-sizing: border-box; font-family: sans-serif;
+        }
+        #landscape-warning h2 { font-size: 30px; margin-bottom: 10px; }
+        
+        #game-container {
+            display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; padding-top: 5px;
+        }
+
+        /* Show warning only on mobile portrait */
+        @media screen and (orientation: portrait) and (max-width: 800px) {
+            #landscape-warning { display: flex; }
+            #game-container { display: none; }
+        }
+
         #ui-top { 
             width: 100%; max-width: 850px; padding: 10px 15px; display: flex; justify-content: space-between; 
-            background: var(--ui); border-bottom: 4px solid #000; box-sizing: border-box;
+            background: var(--ui); border-bottom: 4px solid #000; box-sizing: border-box; align-items: center;
         }
-        .mode-toggle { margin: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        .mode-toggle { margin: 5px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
         canvas { 
             border: 10px solid #221a10; cursor: crosshair; 
             box-shadow: 0 0 30px rgba(0,0,0,0.8); background: #4a3728;
             image-rendering: pixelated;
-            max-width: 95vw; height: auto;
+            max-width: 95vw; max-height: 70vh; /* Fits screen perfectly */
             touch-action: none; 
         }
         .score { font-size: clamp(16px, 4vw, 24px); font-weight: bold; border: 2px solid #555; padding: 5px 10px; background: #222; }
         #status-display { 
             font-size: clamp(14px, 3.5vw, 22px); color: #f1c40f; font-weight: bold; 
-            text-shadow: 2px 2px #000; padding: 10px; text-align: center;
+            text-shadow: 2px 2px #000; padding: 10px; text-align: center; flex-grow: 1;
         }
-        button { cursor: pointer; background: #444; color: white; border: 1px solid #777; padding: 12px 18px; font-weight: bold; font-family: inherit;}
+        button { cursor: pointer; background: #444; color: white; border: 1px solid #777; padding: 8px 16px; font-weight: bold; font-family: inherit;}
         button.active { background: #d63031; border-color: #fff; }
     </style>
 </head>
 <body>
 
-<div id="ui-top">
-    <div class="score" style="color: #ff7675;">RED: <span id="s1">0</span></div>
-    <div id="status-display">WAITING...</div>
-    <div class="score" style="color: #74b9ff;">BLUE: <span id="s2">0</span></div>
+<div id="landscape-warning">
+    <h2>🔄 Rotate Your Phone</h2>
+    <p>Please turn your device sideways to play Sharpener Fight.</p>
 </div>
 
-<div class="mode-toggle">
-    <button id="pvpBtn" class="active" onclick="setMode('pvp')">PLAYER VS PLAYER</button>
-    <button id="pvcBtn" onclick="setMode('pvc')">VS COMPUTER</button>
-</div>
+<div id="game-container">
+    <div id="ui-top">
+        <div class="score" style="color: #ff7675;">RED: <span id="s1">0</span></div>
+        <div id="status-display">WAITING...</div>
+        <div class="score" style="color: #74b9ff;">BLUE: <span id="s2">0</span></div>
+    </div>
 
-<canvas id="game" width="850" height="550"></canvas>
+    <div class="mode-toggle">
+        <button id="pvpBtn" class="active" onclick="setMode('pvp')">PLAYER VS PLAYER</button>
+        <button id="pvcBtn" onclick="setMode('pvc')">VS COMPUTER</button>
+    </div>
+
+    <canvas id="game" width="850" height="550"></canvas>
+</div>
 
 <script>
     const canvas = document.getElementById('game');
@@ -65,7 +92,7 @@
         document.getElementById('pvpBtn').className = m === 'pvp' ? 'active' : '';
         document.getElementById('pvcBtn').className = m === 'pvc' ? 'active' : '';
         scores = [0, 0]; 
-        resetRound(0); // Forces RED (Player 1) to start when switching modes
+        resetRound(0); // Force Red to start on a brand new game
     }
 
     class Sharpener {
@@ -82,16 +109,13 @@
             if(!this.active) return;
             ctx.save();
             ctx.translate(this.x, this.y);
-            // Shadow
             ctx.fillStyle = "rgba(0,0,0,0.4)";
             ctx.fillRect(-18, -12, 44, 32);
-            // Plastic Body
             ctx.fillStyle = this.color;
             ctx.strokeStyle = "#111";
             ctx.lineWidth = 3;
             ctx.strokeRect(-22, -16, 44, 32);
             ctx.fillRect(-22, -16, 44, 32);
-            // Blade
             ctx.fillStyle = "#95a5a6";
             ctx.fillRect(6, -10, 12, 20);
             ctx.restore();
@@ -214,11 +238,9 @@
         
         [p1, p2].forEach(p => {
             p.update();
-            // Hole collision logic
             if(obstacle && obstacle.type === 'hole' && Math.hypot(p.x - obstacle.x, p.y - obstacle.y) < 40) {
                 p.active = false;
             }
-            // Pencil/Eraser collision logic
             if(obstacle && (obstacle.type === 'pencil' || obstacle.type === 'eraser')) {
                 if(p.x > obstacle.x && p.x < obstacle.x+20 && p.y > obstacle.y && p.y < obstacle.y+180) {
                     p.vx *= -1; p.x += p.vx;
@@ -226,25 +248,32 @@
             }
         });
 
-        // Check for out of bounds OR falling in hole (!active)
+        // Check for points
         if (p1.x < -30 || p1.x > 880 || p1.y < -30 || p1.y > 580 || !p1.active) { 
-            scores[1]++; resetRound(0); return true; // Red loses, Red gets next turn
+            scores[1]++; resetRound(); return true; 
         }
         if (p2.x < -30 || p2.x > 880 || p2.y < -30 || p2.y > 580 || !p2.active) { 
-            scores[0]++; resetRound(1); return true; // Blue loses, Blue gets next turn
+            scores[0]++; resetRound(); return true; 
         }
         
         return false;
     }
 
-    // `loser` variable dictates who goes next to keep things fair
-    function resetRound(loser) {
+    // forceTurn is only used when resetting the entire game back to 0-0
+    // Otherwise, the turn STRICTLY toggles to the other player.
+    function resetRound(forceTurn = null) {
         p1.spawn(0); p2.spawn(1);
         spawnObstacle();
         isMoving = false;
         aiThinking = false;
         drag.active = false;
-        turn = loser; // The player who died gets the next shot
+        
+        if (forceTurn !== null) {
+            turn = forceTurn;
+        } else {
+            turn = 1 - turn; // STRICT ALTERNATION
+        }
+        
         updateUI();
     }
 
@@ -265,31 +294,34 @@
         let pointScored = physics(); 
         p1.draw(); p2.draw();
 
+        // Standard Turn Switch (When pieces stop moving, and nobody fell off)
         if (!pointScored) {
             const p1Stopped = Math.abs(p1.vx) < 0.1 && Math.abs(p1.vy) < 0.1;
             const p2Stopped = Math.abs(p2.vx) < 0.1 && Math.abs(p2.vy) < 0.1;
             
             if(isMoving && p1Stopped && p2Stopped) {
                 isMoving = false;
-                turn = 1 - turn;
+                turn = 1 - turn; // STRICT ALTERNATION
             }
         }
 
+        // Update text display
         const msg = document.getElementById('status-display');
         if (aiThinking) {
             msg.innerText = "CPU IS THINKING...";
             msg.style.color = "#74b9ff";
         } else {
-            msg.innerText = turn === 0 ? "RED'S CHANCE" : "BLUE'S CHANCE";
+            msg.innerText = turn === 0 ? "RED'S TURN" : "BLUE'S TURN";
             msg.style.color = turn === 0 ? "#ff7675" : "#74b9ff";
         }
 
+        // Trigger AI if it's CPU's turn
         if(turn === 1 && gameMode === 'pvc') runAI();
 
         requestAnimationFrame(loop);
     }
 
-    resetRound(0); // Start the game fresh on Red's turn
+    resetRound(0); // Initialize game
     loop();
 </script>
 </body>
