@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Sharpener Fight: Grunge Desk</title>
+    <style>
+        :root { --wood: #3d2b1f; --ui: #1a1a1a; }
+        body { 
+            margin: 0; background: #2d3436; color: #eee; 
+            font-family: 'Courier New', monospace; display: flex; flex-direction: column; align-items: center;
+            user-select: none; -webkit-user-select: none;
+            padding-top: 10px;
+        }
+        #ui-top { 
+            width: 100%; max-width: 850px; padding: 10px 15px; display: flex; justify-content: space-between; 
+            background: var(--ui); border-bottom: 4px solid #000; box-sizing: border-box;
+        }
+        .mode-toggle { margin: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        canvas { 
+            border: 10px solid #221a10; cursor: crosshair; 
+            box-shadow: 0 0 30px rgba(0,0,0,0.8); background: #4a3728;
+            image-rendering: pixelated;
+            max-width: 95vw; height: auto; /* Makes it responsive */
+            touch-action: none; /* STOPS MOBILE SCROLLING */
+        }
+        .score { font-size: clamp(16px, 4vw, 24px); font-weight: bold; border: 2px solid #555; padding: 5px 10px; background: #222; }
+        #status-display { 
+            font-size: clamp(14px, 3.5vw, 22px); color: #f1c40f; font-weight: bold; 
+            text-shadow: 2px 2px #000; padding: 10px; text-align: center;
+        }
+        button { cursor: pointer; background: #444; color: white; border: 1px solid #777; padding: 12px 18px; font-weight: bold; font-family: inherit;}
+        button.active { background: #d63031; border-color: #fff; }
+    </style>
+</head>
+<body>
+
+<div id="ui-top">
+    <div class="score" style="color: #ff7675;">RED: <span id="s1">0</span></div>
+    <div id="status-display">WAITING...</div>
+    <div class="score" style="color: #74b9ff;">BLUE: <span id="s2">0</span></div>
+</div>
+
+<div class="mode-toggle">
+    <button id="pvpBtn" class="active" onclick="setMode('pvp')">PLAYER VS PLAYER</button>
+    <button id="pvcBtn" onclick="setMode('pvc')">VS COMPUTER</button>
+</div>
+
+<canvas id="game" width="850" height="550"></canvas>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    let scores = [0, 0], turn = 0, isMoving = false, gameMode = 'pvp';
+    let drag = { active: false, x: 0, y: 0, mx: 0, my: 0 };
+    let obstacle = null;
+    let aiThinking = false;
+
+    function setMode(m) {
+        gameMode = m;
+        document.getElementById('pvpBtn').className = m === 'pvp' ? 'active' : '';
+        document.getElementById('pvcBtn').className = m === 'pvc' ? 'active' : '';
+        scores = [0, 0]; updateUI(); resetRound(0);
+    }
+
+    class Sharpener {
+        constructor(color, side) {
+            this.color = color; this.radius = 22; this.mass = 1.8;
+            this.spawn(side);
+        }
+        spawn(side) {
+            this.x = side === 0 ? 100 + Math.random() * 150 : 600 + Math.random() * 150;
+            this.y = 100 + Math.random() * 350;
+            this.vx = 0; this.vy = 0; this.active = true;
+        }
+        draw() {
+            if(!this.active) return;
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            // Shadow
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            ctx.fillRect(-18, -12, 44, 32);
+            // Plastic Body
+            ctx.fillStyle = this.color;
+            ctx.strokeStyle = "#111";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(-22, -16, 44, 32);
+            ctx.fillRect(-22, -16, 44, 32);
+            // Blade
+            ctx.fillStyle = "#95a5a6";
+            ctx.fillRect(6, -10, 12, 20);
+            ctx.restore();
+        }
+        update() {
+            this.x += this.vx; this.y += this.vy;
+            this.vx *= 0.965; this.vy *= 0.965; 
+            if (Math.abs(this.vx) < 0.15) this.vx = 0;
+            if (Math.abs(this.vy) < 0.15) this.vy = 0;
+        }
+    }
+
+    const p1 = new Sharpener('#ff4d4d', 0);
+    const p2 = new Sharpener('#4d94ff', 1);
+
+    function spawnObstacle() {
+        const types = ['hole', 'pencil', 'eraser'];
+        obstacle = { 
+            type: types[Math.floor(Math.random()*3)], 
+            x: 350+Math.random()*150, 
+            y: 100+Math.random()*350 
+        };
+    }
+
+    function drawDesk() {
+        ctx.fillStyle = "#3d2b1f";
+        ctx.fillRect(0, 0, 850, 550);
+        ctx.strokeStyle = "rgba(0,0,0,0.2)";
+        for(let i=0; i<850; i+=60) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i+5, 550); ctx.stroke();
+        }
+        ctx.globalAlpha = 0.2;
+        ctx.strokeStyle = "#000";
+        for(let i=0; i<10; i++) {
+            ctx.beginPath(); ctx.moveTo(Math.random()*850, Math.random()*550);
+            ctx.lineTo(Math.random()*850, Math.random()*550); ctx.stroke();
+        }
+        ctx.globalAlpha = 1.0;
+
+        if(obstacle) {
+            if(obstacle.type === 'hole') {
+                ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(obstacle.x, obstacle.y, 45, 0, 7); ctx.fill();
+            } else if(obstacle.type === 'pencil') {
+                ctx.fillStyle = "#e67e22"; ctx.fillRect(obstacle.x, obstacle.y, 12, 180);
+            } else {
+                ctx.fillStyle = "#ecf0f1"; ctx.fillRect(obstacle.x, obstacle.y, 70, 45);
+            }
+        }
+    }
+
+    function runAI() {
+        if(gameMode === 'pvc' && turn === 1 && !isMoving && !aiThinking) {
+            aiThinking = true;
+            setTimeout(() => {
+                const dx = p1.x - p2.x;
+                const dy = p1.y - p2.y;
+                p2.vx = dx * 0.14 + (Math.random()-0.5)*3; // Slight random offset so it's not perfect
+                p2.vy = dy * 0.14 + (Math.random()-0.5)*3;
+                isMoving = true;
+                aiThinking = false;
+            }, 1000); // Wait 1 second before shooting
+        }
+    }
+
+    // --- SCALED POINTER LOGIC FOR MOBILE GRABBING ---
+    function getPointerPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        let clientX = e.clientX;
+        let clientY = e.clientY;
+        
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        }
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    function handleInputStart(e) {
+        if (isMoving || aiThinking || (gameMode === 'pvc' && turn === 1)) return;
+        const pos = getPointerPos(e);
+        const p = turn === 0 ? p1 : p2;
+        
+        // Check if user touched near the sharpener
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < 50) {
+            drag.active = true; drag.x = p.x; drag.y = p.y; drag.mx = pos.x; drag.my = pos.y;
+            if(e.cancelable) e.preventDefault(); // Prevents extra scrolling actions
+        }
+    }
+
+    function handleInputMove(e) {
+        if (drag.active) {
+            const pos = getPointerPos(e);
+            drag.mx = pos.x; drag.my = pos.y;
+            if(e.cancelable) e.preventDefault();
+        }
+    }
+
+    function handleInputEnd(e) {
+        if (!drag.active) return;
+        const p = turn === 0 ? p1 : p2;
+        p.vx = (drag.x - drag.mx) * 0.18;
+        p.vy = (drag.y - drag.my) * 0.18;
+        drag.active = false; isMoving = true;
+    }
+
+    // Register Mouse Events
+    canvas.addEventListener('mousedown', handleInputStart);
+    window.addEventListener('mousemove', handleInputMove);
+    window.addEventListener('mouseup', handleInputEnd);
+
+    // Register Touch Events
+    canvas.addEventListener('touchstart', handleInputStart, {passive: false});
+    window.addEventListener('touchmove', handleInputMove, {passive: false});
+    window.addEventListener('touchend', handleInputEnd);
+    // ------------------------------------------------
+
+    function physics() {
+        let dx = p2.x - p1.x, dy = p2.y - p1.y, dist = Math.hypot(dx, dy);
+        if (dist < 44) {
+            let nx = dx / dist, ny = dy / dist;
+            let v1n = p1.vx * nx + p1.vy * ny, v2n = p2.vx * nx + p2.vy * ny;
+            if (v1n - v2n > 0) {
+                let impulse = (v1n - v2n) * 1.2;
+                p1.vx -= impulse * nx; p1.vy -= impulse * ny;
+                p2.vx += impulse * nx; p2.vy += impulse * ny;
+            }
+        }
+        
+        [p1, p2].forEach(p => {
+            p.update();
+            if(obstacle && obstacle.type === 'hole' && Math.hypot(p.x - obstacle.x, p.y - obstacle.y) < 40) p.active = false;
+            if(obstacle && (obstacle.type === 'pencil' || obstacle.type === 'eraser')) {
+                if(p.x > obstacle.x && p.x < obstacle.x+20 && p.y > obstacle.y && p.y < obstacle.y+180) {
+                    p.vx *= -1; p.x += p.vx;
+                }
+            }
+        });
+
+        if (p1.x < -20 || p1.x > 870 || p1.y < -20 || p1.y > 570 || !p1.active) { scores[1]++; resetRound(1); }
+        else if (p2.x < -20 || p2.x > 870 || p2.y < -20 || p2.y > 570 || !p2.active) { scores[0]++; resetRound(0); }
+    }
+
+    function resetRound(winner) {
+        p1.spawn(0); p2.spawn(1);
+        spawnObstacle();
+        isMoving = false;
+        aiThinking = false;
+        turn = winner === 0 ? 1 : 0; // Loser gets the next turn 
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById('s1').innerText = scores[0];
+        document.getElementById('s2').innerText = scores[1];
+    }
+
+    function loop() {
+        drawDesk();
+        if(drag.active) {
+            ctx.setLineDash([5, 5]); ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(drag.x, drag.y); ctx.lineTo(drag.mx, drag.my); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        physics(); p1.draw(); p2.draw();
+
+        // Stricter check to ensure items have fully stopped before passing the turn
+        const p1Stopped = Math.abs(p1.vx) === 0 && Math.abs(p1.vy) === 0;
+        const p2Stopped = Math.abs(p2.vx) === 0 && Math.abs(p2.vy) === 0;
+        
+        if(isMoving && p1Stopped && p2Stopped) {
+            isMoving = false;
+            turn = 1 - turn;
+        }
+
+        const msg = document.getElementById('status-display');
+        if (aiThinking) {
+            msg.innerText = "CPU IS THINKING...";
+            msg.style.color = "#74b9ff";
+        } else {
+            msg.innerText = turn === 0 ? "RED'S CHANCE" : "BLUE'S CHANCE";
+            msg.style.color = turn === 0 ? "#ff7675" : "#74b9ff";
+        }
+
+        if(turn === 1 && gameMode === 'pvc') runAI();
+
+        requestAnimationFrame(loop);
+    }
+
+    spawnObstacle();
+    loop();
+</script>
+</body>
+</html>
